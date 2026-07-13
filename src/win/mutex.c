@@ -63,3 +63,15 @@ natsMutex_Destroy(natsMutex *m)
     DeleteCriticalSection(m);
     NATS_FREE(m);
 }
+
+uint32_t
+natsAtomic_Increment(volatile uint32_t *value)
+{
+    return (uint32_t) InterlockedIncrement((volatile LONG*) value);
+}
+
+uint32_t
+natsAtomic_Load(volatile uint32_t *value)
+{
+    return (uint32_t) InterlockedCompareExchange((volatile LONG*) value, 0, 0);
+}

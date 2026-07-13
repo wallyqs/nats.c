@@ -122,3 +122,15 @@ natsMutex_Destroy(natsMutex *m)
     pthread_mutex_destroy(m);
     NATS_FREE(m);
 }
+
+uint32_t
+natsAtomic_Increment(volatile uint32_t *value)
+{
+    return __atomic_add_fetch(value, 1, __ATOMIC_RELAXED);
+}
+
+uint32_t
+natsAtomic_Load(volatile uint32_t *value)
+{
+    return __atomic_load_n(value, __ATOMIC_RELAXED);
+}

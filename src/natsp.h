@@ -870,6 +870,7 @@ struct __natsConnection
 
     natsThread          *flusherThread;
     natsCondition       *flusherCond;
+    volatile uint32_t   flusherGeneration;
     bool                flusherSignaled;
     bool                flusherStop;
 
@@ -965,6 +966,11 @@ natsThread_Detach(natsThread *t);
 void
 natsThread_Yield(void);
 
+// Yields to another runnable thread without deliberately sleeping. Unlike
+// natsThread_Yield(), this must not use a millisecond sleep on Windows.
+void
+natsThread_FastYield(void);
+
 void
 natsThread_Destroy(natsThread *t);
 
@@ -1028,6 +1034,12 @@ natsMutex_Unlock(natsMutex *m);
 
 void
 natsMutex_Destroy(natsMutex *m);
+
+uint32_t
+natsAtomic_Increment(volatile uint32_t *value);
+
+uint32_t
+natsAtomic_Load(volatile uint32_t *value);
 
 //
 // JetStream

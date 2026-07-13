@@ -2040,10 +2040,14 @@ natsConn_flushOrKickFlusher(natsConnection *nc)
     {
         s = natsConn_bufferFlush(nc);
     }
-    else if (!(nc->flusherSignaled) && (nc->bw != NULL))
+    else if (nc->bw != NULL)
     {
-        nc->flusherSignaled = true;
-        natsCondition_Signal(nc->flusherCond);
+        natsAtomic_Increment(&(nc->flusherGeneration));
+        if (!(nc->flusherSignaled))
+        {
+            nc->flusherSignaled = true;
+            natsCondition_Signal(nc->flusherCond);
+        }
     }
     return s;
 }
@@ -2572,6 +2576,7 @@ _flusher(void *arg)
 {
     natsConnection  *nc  = (natsConnection*) arg;
     natsStatus      s;
+    uint32_t        generation;
 
     while (true)
     {
@@ -2586,18 +2591,22 @@ _flusher(void *arg)
             break;
         }
 
-        //TODO: If we process the request right away, performance
-        //      will suffer when sending quickly very small messages.
-        //      The buffer is going to be always flushed, which
-        //      defeats the purpose of a write buffer.
-        //      We need to revisit this.
-
-        // Give a chance to accumulate more requests...
-        natsCondition_TimedWait(nc->flusherCond, nc->mu, 1);
+        // Give another runnable publisher one scheduling opportunity. If no
+        // publish occurs, flush the isolated message immediately. If publishing
+        // continues, briefly coalesce the burst to preserve write throughput.
+        generation = natsAtomic_Load(&(nc->flusherGeneration));
+        natsConn_Unlock(nc);
+        natsThread_FastYield();
+        if (natsAtomic_Load(&(nc->flusherGeneration)) != generation)
+            nats_Sleep(1);
+        natsConn_Lock(nc);
 
         nc->flusherSignaled = false;
 
-        if (!_isConnected(nc) || natsConn_isClosed(nc) || natsConn_isReconnecting(nc))
+        if (nc->flusherStop
+            || !_isConnected(nc)
+            || natsConn_isClosed(nc)
+            || natsConn_isReconnecting(nc))
         {
             natsConn_Unlock(nc);
             break;
